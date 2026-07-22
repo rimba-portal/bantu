@@ -3,11 +3,11 @@
 namespace Rimba\HelpFile\Actions;
 
 use Filament\Actions\Action;
-use Filament\Actions\Contracts\HasActions;
 use Filament\Actions\Concerns\InteractsWithActions;
-use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\ViewField;
+use Filament\Forms\Concerns\InteractsWithForms;
+use Filament\Forms\Contracts\HasForms;
 use Illuminate\Support\Facades\Route;
 use Livewire\Component;
 
@@ -17,6 +17,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
     use InteractsWithForms;
 
     public string $helpFile = '';
+
     public string $panelPath = '';
 
     public function mount(): void
@@ -32,7 +33,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
         $this->helpFile = str($uri)
             ->when(
                 $this->panelPath !== '',
-                fn($str) => $str->after($this->panelPath . '/')
+                fn ($str) => $str->after($this->panelPath.'/')
             )
             ->replaceMatches('/\{tenant\}\//', '')
             ->replaceMatches('/\}.*/', '}')
@@ -48,7 +49,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
 
     protected function getHelpFilePath(string $helpFile): string
     {
-        return $this->getHelpDirectory() . $helpFile . '.md';
+        return $this->getHelpDirectory().$helpFile.'.md';
     }
 
     protected function resolveHelpFile(): array
@@ -94,7 +95,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
             $this->getHelpFilePath($help['requested'])
         );
         if (! $help['path']) {
-        return <<<MD
+            return <<<MD
 >
 > ## **No help file exists for:** `{$help['requested']}`
 >
@@ -121,7 +122,7 @@ MD;
 
 MD;
 
-        $content = $header . $content;
+        $content = $header.$content;
 
         if (! $help['inherited']) {
             return $content;
