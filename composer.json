@@ -1,0 +1,30 @@
+{
+    "name": "rimba/bantu",
+    "description": "Help file package for creating user guides and admin guides in Laravel Filament.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "BIT Ecosystem",
+            "email": "bit.ecosystem@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "rimba/asas": "^1.0"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Rimba\\Helpfile\\HelpfileServiceProvider"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+           "Rimba\\Helpfile\\": "src/"
+        }
+    },
+    "minimum-stability": "alpha",
+    "prefer-stable": true
+}
