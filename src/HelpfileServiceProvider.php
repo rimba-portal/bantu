@@ -8,7 +8,7 @@ use Filament\Support\Facades\FilamentView;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Support\Facades\Blade;
 use Livewire\Livewire;
-use Rimba\Base\BitesServiceProvider;
+use Rimba\Base\Services\BitesServiceProvider;
 use Rimba\HelpFile\Actions\GetHelpAction;
 
 class HelpfileServiceProvider extends BitesServiceProvider
