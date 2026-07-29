@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Rimba\HelpFile\Actions;
 
 use Filament\Actions\Action;
@@ -44,7 +46,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
 
     protected function getHelpDirectory(): string
     {
-        return public_path("helpfiles/{$this->panelPath}/");
+        return public_path(sprintf('helpfiles/%s/', $this->panelPath));
     }
 
     protected function getHelpFilePath(string $helpFile): string
