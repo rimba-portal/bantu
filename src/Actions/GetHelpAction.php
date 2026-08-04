@@ -10,6 +10,8 @@ use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\ViewField;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Illuminate\Contracts\View\Factory;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Route;
 use Livewire\Component;
 
@@ -28,7 +30,7 @@ class GetHelpAction extends Component implements HasActions, HasForms
         $uri = ltrim((string) $route?->uri(), '/');
 
         $this->panelPath = ltrim(
-            (string) filament()->getCurrentPanel()->getPath(),
+            filament()->getCurrentPanel()->getPath(),
             '/'
         );
 
@@ -165,7 +167,7 @@ MD;
             ]);
     }
 
-    public function render()
+    public function render(): Factory|View
     {
         return view('bites::help-button');
     }
