@@ -8,71 +8,221 @@ use Filament\Actions\Action;
 use Filament\Actions\Concerns\InteractsWithActions;
 use Filament\Actions\Contracts\HasActions;
 use Filament\Forms\Components\ViewField;
-use Filament\Forms\Concerns\InteractsWithForms;
-use Filament\Forms\Contracts\HasForms;
+use Filament\Schemas\Concerns\InteractsWithSchemas;
+use Filament\Schemas\Contracts\HasSchemas;
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Component;
 
-class GetHelpAction extends Component implements HasActions, HasForms
+class GetHelpAction extends Component implements HasActions, HasSchemas
 {
     use InteractsWithActions;
-    use InteractsWithForms;
+    use InteractsWithSchemas;
+
+    /**
+     * These MUST be public.
+     *
+     * Livewire persists public properties between requests.
+     */
+    public string $panelPath = '';
 
     public string $helpFile = '';
 
-    public string $panelPath = '';
+    /*
+    |--------------------------------------------------------------------------
+    | Mount
+    |--------------------------------------------------------------------------
+    */
 
     public function mount(): void
     {
         $route = Route::current();
-        $uri = ltrim((string) $route?->uri(), '/');
 
-        $this->panelPath = ltrim(
-            filament()->getCurrentPanel()->getPath(),
+        $this->panelPath = trim(
+            filament()->getCurrentPanel()?->getPath() ?? '',
             '/'
         );
 
-        $this->helpFile = str($uri)
-            ->when(
-                $this->panelPath !== '',
-                fn ($str) => $str->after($this->panelPath.'/')
+        $this->helpFile = $this->resolveHelpFileName($route);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Help File Name
+    |--------------------------------------------------------------------------
+    */
+
+    protected function resolveHelpFileName($route): string
+    {
+        if (! $route) {
+            return '';
+        }
+
+        $uri = trim(
+            $route->uri(),
+            '/'
+        );
+
+        /*
+         * Deal with the panel root.
+         *
+         * /staff
+         *      =>
+         * staff
+         *
+         * /admin
+         *      =>
+         * admin
+         */
+        if ($uri === $this->panelPath) {
+            return $this->panelPath;
+        }
+
+        /*
+         * Remove panel path from the URI.
+         *
+         * admin/agreements/{record}
+         *      =>
+         * agreements/{record}
+         */
+        if (
+            $this->panelPath !== ''
+            && str_starts_with(
+                $uri,
+                $this->panelPath.'/'
             )
-            ->replaceMatches('/\{tenant\}\//', '')
-            ->replaceMatches('/\}.*/', '}')
-            ->replace('{record}', (string) $route?->parameter('record'))
+        ) {
+            $uri = substr(
+                $uri,
+                strlen($this->panelPath) + 1
+            );
+        }
+
+        /*
+         * Remove tenant segment.
+         */
+        $uri = preg_replace(
+            '#^\{tenant\}/#',
+            '',
+            $uri
+        ) ?? $uri;
+
+        /*
+         * Replace route parameters with their actual values.
+         *
+         * agreements/{record}
+         *      =>
+         * agreements/1
+         */
+        foreach ($route->parameters() as $name => $value) {
+            if (is_object($value)) {
+                $value = method_exists($value, 'getRouteKey')
+                    ? $value->getRouteKey()
+                    : (string) $value;
+            }
+
+            $uri = str_replace(
+                '{'.$name.'}',
+                (string) $value,
+                $uri
+            );
+
+            /*
+             * Also handle optional parameters.
+             */
+            $uri = str_replace(
+                '{'.$name.'?}',
+                (string) $value,
+                $uri
+            );
+        }
+
+        /*
+         * Convert:
+         *
+         * agreements/1
+         *
+         * into:
+         *
+         * agreements.1
+         */
+        return str($uri)
             ->replace('/', '.')
+            ->trim('.')
             ->toString();
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Help Paths
+    |--------------------------------------------------------------------------
+    */
+
     protected function getHelpDirectory(): string
     {
-        return public_path(sprintf('helpfiles/%s/', $this->panelPath));
+        return collect([
+            'help',
+            $this->panelPath,
+        ])
+            ->filter()
+            ->implode('/');
     }
 
     protected function getHelpFilePath(string $helpFile): string
     {
-        return $this->getHelpDirectory().$helpFile.'.md';
+        return $this->getHelpDirectory()
+            .'/'
+            .$helpFile
+            .'.md';
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Help Resolution
+    |--------------------------------------------------------------------------
+    */
 
     protected function resolveHelpFile(): array
     {
         $requested = $this->helpFile;
+
+        if ($requested === '') {
+            return [
+                'requested' => '',
+                'resolved' => null,
+                'path' => null,
+                'inherited' => false,
+            ];
+        }
+
         $resolved = $requested;
 
-        while (true) {
-            $file = $this->getHelpFilePath($resolved);
+        while ($resolved !== '') {
+            $path = $this->getHelpFilePath(
+                $resolved
+            );
 
-            if (file_exists($file)) {
+            if (
+                Storage::disk('local')
+                    ->exists($path)
+            ) {
                 return [
                     'requested' => $requested,
                     'resolved' => $resolved,
-                    'path' => $file,
+                    'path' => $path,
                     'inherited' => $requested !== $resolved,
                 ];
             }
 
+            /*
+             * Walk up the hierarchy:
+             *
+             * agreements.1.edit
+             * agreements.1
+             * agreements
+             */
             if (! str_contains($resolved, '.')) {
                 break;
             }
@@ -90,43 +240,45 @@ class GetHelpAction extends Component implements HasActions, HasForms
         ];
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Markdown
+    |--------------------------------------------------------------------------
+    */
+
     protected function buildMarkdownContent(): string
     {
         $help = $this->resolveHelpFile();
-        $expectedPath = str_replace(
-            ['/', '\\'],
-            DIRECTORY_SEPARATOR,
-            $this->getHelpFilePath($help['requested'])
-        );
-        if (! $help['path']) {
-            return <<<MD
->
-> ## **No help file exists for:** `{$help['requested']}`
->
-> Please create the following markdown file: 
-> 
-> `{$expectedPath}`
->
 
----
-
+        if ($help['requested'] === '') {
+            return <<<'MD'
+> [!WARNING]
+> Unable to determine the help file for this page.
 MD;
         }
 
-        $content = file_get_contents($help['path']);
-        $resolvedName = str($help['resolved'])
-            ->afterLast('.')
-            ->replace('_', ' ')
-            ->headline()
-            ->toString();
-        $header = <<<MD
-# **{$resolvedName} Quick Guide**
+        $expectedPath = storage_path(
+            'app/private/'
+            .$this->getHelpFilePath(
+                $help['requested']
+            )
+        );
+
+        if (! $help['path']) {
+            return <<<MD
+> [!WARNING]
+> ## **No help file exists for:** `{$help['requested']}`
+>
+> Please create the following markdown file:
+>
+> `{$expectedPath}`
 
 ---
-
 MD;
+        }
 
-        $content = $header.$content;
+        $content = Storage::disk('local')
+            ->get($help['path']);
 
         if (! $help['inherited']) {
             return $content;
@@ -137,10 +289,11 @@ MD;
 > ## **No help file exists for:** `{$help['requested']}`
 >
 > Please create the following markdown file:
+>
 > `{$expectedPath}`
 >
-> Displaying the closest parent documentation: `{$help['resolved']}`
->
+> Displaying the closest parent documentation:
+> `{$help['resolved']}`
 
 ---
 
@@ -148,9 +301,15 @@ MD;
 MD;
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Filament Action
+    |--------------------------------------------------------------------------
+    */
+
     public function myHeaderAction(): Action
     {
-        return Action::make('myHeaderAction')
+        return Action::make('myHeader')
             ->icon('bites-helpbook')
             ->label('Quick Guide')
             ->iconButton()
@@ -166,6 +325,12 @@ MD;
                     ]),
             ]);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Render
+    |--------------------------------------------------------------------------
+    */
 
     public function render(): Factory|View
     {
